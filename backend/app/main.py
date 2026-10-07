@@ -26,16 +26,16 @@ def items():
 @app.get("/api/board")
 def board():
     c = connect()
-    # status=available 的物品再过一遍资格闸：合格进可借栏并计入可借数，
-    # 脏物落 blocked 分区，三处（可借栏/物主栏/顶细条）都不计为可借。
+    # 一个资格世界：物品先过 annotate_item（borrow_rules.lend_eligibility），
+    # 再按同一结果分可借/暂不可借两栏；已有在借的物品归在借栏，不进可借栏。
+    # 顶细条计数直接数分栏结果，借出闸读的也是同一份资格——三处永不打架。
     pool = [annotate_item(dict(r))
             for r in c.execute("SELECT * FROM items WHERE status='available'")]
-    available = be.flatten_available(pool)
-    blocked = be.empty_blocked()
     loans = [dict(r) for r in c.execute(
         """SELECT loans.*, items.title FROM loans JOIN items ON items.id=loans.item_id
            WHERE loans.status='active'""")]
     c.close()
+    available, blocked = be.split_pool(pool, (l["item_id"] for l in loans))
     cls = classify_loans(loans, date.today().isoformat())
     return {
         "available": available,
@@ -43,7 +43,7 @@ def board():
         "active": cls["active"],
         "overdue": cls["overdue"],
         "counts": {
-            "available": be.counts_from_pool(pool),
+            "available": len(available),
             "blocked": len(blocked),
             "active": len(cls["active"]),
             "overdue": len(cls["overdue"]),
@@ -73,7 +73,8 @@ def lend(iid: int, body: LendIn):
     active = c.execute("SELECT COUNT(*) c FROM loans WHERE item_id=? AND status='active'", (iid,)).fetchone()["c"]
     # 资格闸（脏物/无主）先于互斥闸；拒绝时直接返回，下面的 INSERT/UPDATE
     # 一条都不执行——不会把 data_quality 改成 clean，也不会补写 owner。
-    check = can_lend(item["status"], active, item=be.lend_gate_item(dict(item)))
+    # 闸门读的就是数据库原行，与看板、物主栏同一个资格世界。
+    check = can_lend(item["status"], active, item=dict(item))
     if not check["ok"]:
         c.close(); raise HTTPException(409, check["reason"])
     cur = c.execute(

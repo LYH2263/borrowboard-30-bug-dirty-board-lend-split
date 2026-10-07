@@ -20,7 +20,7 @@
 import { ref, onMounted, provide } from 'vue'
 import { api } from './api'
 const counts = ref({})
-const board = ref({ available: [], active: [], overdue: [] })
+const board = ref({ available: [], blocked: [], active: [], overdue: [] })
 async function load() {
   board.value = await api('/board')
   counts.value = board.value.counts || {}

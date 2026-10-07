@@ -9,9 +9,20 @@
         <input v-model="forms[i.id].borrower" placeholder="借用人" />
         <input v-model="forms[i.id].due_date" placeholder="应还日 YYYY-MM-DD" />
         <button @click="lend(i.id)">借出通过</button>
+        <div v-if="results[i.id]" class="deny-note">{{ results[i.id] }}</div>
       </div>
 
-      <div v-if="false"></div>
+      <template v-if="board.blocked && board.blocked.length">
+        <h3 class="blocked-head">暂不可借（不计入可借数）</h3>
+        <div v-for="i in board.blocked" :key="i.id" class="item blocked">
+          <strong>{{ i.title }}</strong>
+          <span class="chip chip-block">{{ i.data_quality !== 'clean' ? i.data_quality : '暂不可借' }}</span>
+          <div class="muted">物主 {{ i.owner || '—' }}</div>
+          <div class="muted">
+            不可借原因：{{ (i.blocked_reasons || []).map(r => reasonText[r] || r).join('、') }}
+          </div>
+        </div>
+      </template>
     </section>
     <section class="pane">
       <h2>在借 / 逾期</h2>
