@@ -25,10 +25,12 @@ def can_lend(item_status: str, active_loans: int, item: dict | None = None) -> d
         eligibility = lend_eligibility(item)
         if not eligibility["ok"]:
             return {"ok": False, "reason": eligibility["reasons"][0]}
-    if item_status != "available":
-        return {"ok": False, "reason": "item_not_available"}
+    # 先看有没有在借借单（互斥），再看物品状态：active loan 是更具体的拒绝理由，
+    # 也兜住了"items 已翻 on_loan / loans 有孤儿行"两种形态。
     if active_loans > 0:
         return {"ok": False, "reason": "already_on_loan"}
+    if item_status != "available":
+        return {"ok": False, "reason": "item_not_available"}
     return {"ok": True, "reason": ""}
 
 
@@ -51,17 +53,22 @@ def classify_loans(loans: list[dict], today: str) -> dict:
     return {"active": active, "overdue": overdue, "returned": returned}
 
 
-def annotate_item(item: dict) -> dict:
+def annotate_item(item: dict, active_loans: int = 0) -> dict:
     """给物品补上借出视角字段：eligible / blocked_reasons / lend_status。
 
     lend_status 是前端物主栏等处展示的统一状态：
     on_loan / lendable / blocked。
+
+    lendable 与 can_lend 的放行条件严格同义：档案合格（有主且 clean）、
+    status=available、没有 active 借单。脏物/无主一律 blocked，
+    不会因为状态是 available 就被洗成可借。
     """
     out = dict(item)
     eligibility = lend_eligibility(item)
     out["eligible"] = eligibility["ok"]
     out["blocked_reasons"] = eligibility["reasons"]
-    if item.get("status") == "on_loan":
+    out["active_loans"] = active_loans
+    if item.get("status") == "on_loan" or active_loans > 0:
         out["lend_status"] = "on_loan"
     elif eligibility["ok"]:
         out["lend_status"] = "lendable"
